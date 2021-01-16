@@ -1,0 +1,155 @@
+﻿@page "/"
+@inject CovidApiService _api;
+@using UkCovidVaccineInfo.Data
+@using Humanizer
+@using System.Reflection.Metadata.Ecma335
+
+<h1>UK COVID-19 Vaccination Stats</h1>
+
+@if (IsLoading)
+{
+    <h3>Loading...</h3>
+}
+else
+{
+    <h2>Latest Stats (@LatestData.Date.ToString("dddd d MMMM yyyy"))</h2>
+
+
+    <div class="row">
+        <div class="col-lg-12">
+            <Metric Value="@LatestData.Total" />
+            <i>Total vaccine doses administered</i>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-3">
+            <Metric Value="@LatestData.NewFirstDose" />
+            <i>Newest 1st Doses</i>
+        </div>
+        <div class="col-lg-3">
+            <Metric Value="@LatestData.CumFirstDose" />
+            <i>Total 1st Doses</i>
+        </div>
+        <div class="col-lg-3">
+            <Metric Value="@LatestData.NewSecondDose" />
+            <i>Newest 2nd Doses</i>
+        </div>
+        <div class="col-lg-3">
+            <Metric Value="@LatestData.CumSecondDose" />
+            <i>Total 2nd Doses</i>
+        </div>
+    </div>
+
+    <br />
+    <h2>Assuming we maintain...</h2>
+
+    <h3>@(LatestData.TotalNew.Value.ToString("N0")) vaccinations a day</h3>
+    <i>based on latest day's new vaccinations</i>
+    <div class="row">
+        <div class="col-lg-4">
+            <Metric Value="@((LatestData.TotalNew.Value * 7))" />
+            <i>Total vaccinations /wk</i>
+        </div>
+        <div class="col-lg-4">
+            <Metric Value="@((LatestData.TotalNew.Value * 30))" />
+            <i>Total vaccinations /mo</i>
+        </div>
+        <div class="col-lg-4">
+            <Metric Value="@(CalculateFinishedDay(LatestData.TotalNew.Value).ToString("MMMM yyyy"))" />
+            <i>Everyone eligible is fully vaccinated</i>
+        </div>
+    </div>
+
+
+    <br />
+
+    <h3>@(AvgDailyVaccsThisWeek.Value.ToString("N0")) vaccinations a day</h3>
+    <i>based on the average of daily vaccinations over the past 7 days</i>
+    <div class="row">
+        <div class="col-lg-4">
+            <Metric Value="@((AvgDailyVaccsThisWeek.Value * 7))" />
+            <i>Total vaccinations /wk</i>
+        </div>
+        <div class="col-lg-4">
+            <Metric Value="@((AvgDailyVaccsThisWeek.Value * 30))" />
+            <i>Total vaccinations /mo</i>
+        </div>
+        <div class="col-lg-4">
+            <Metric Value="@(CalculateFinishedDay(AvgDailyVaccsThisWeek.Value).ToString("MMMM yyyy"))" />
+            <i>Everyone eligible is fully vaccinated</i>
+        </div>
+    </div>
+        
+    <br />
+    <p>Data provided via the Department of Health and Social Care <a href="http://coronavirus.data.gov.uk">UK Coronavirus Dashboard API</a></p>
+
+    <hr />
+
+    <h5>FAQ</h5>
+    <b>What is this?</b>
+    <p>UK COVID-19 Vaccination Stats aims to give a brief summary of the UK's vaccination efforts and give basic un-official assumptions based on historical data.</p>
+    <br />
+    <b>Wait, who are you?</b>
+    <p>I'm Sam (<a href="https://twitter.com/thesamja">@("@thesamja")</a>), a software developer from Leeds, UK. I do not work for or have links to the DHSC, the NHS or any branch of government / parliament.</p>
+    <br />
+    <b>Where is this information from?</b>
+    <p>All data is retrieved from the Department of Health and Social Care's Coronavirus API, made for their <a href="http://coronavirus.data.gov.uk">dashboard</a>. If you want more in-detail statistics, you should check it out!</p>
+    <br />
+    <b>Can I take the assumptions as fact?</b>
+    <p>No! These assumptions are not official by any stretch of the imagination. These were just made using some basic calculations based on already existing historical data. Things might change, incidents might happen - do not assume these assumptions will be right.</p>
+    <br />
+    <b>How can I find out when I will get the vaccine?</b>
+    <p>The NHS will contact you when you are eligible to get your vaccine. You can try <a href="https://www.omnicalculator.com/health/vaccine-queue-uk">this un-official calculator</a> to estimate when you receive yours.</p>
+    <br />
+    <b>Is this site open-source?</b>
+    <p>Of course - you can find the GitHub repo <a href="https://github.com/avinch/ukcovidvaccineinfo">here.</a></p>
+    <br />
+    <b>I have some feedback / some of this data doesn't look quite right. How can I let you know?</b>
+    <p>If you have any feedback, please drop me an email <a href="mailto:covid@samjas.co.uk">covid@samjas.co.uk</a> or contact me on Twitter <a href="https://twitter.com/thesamja">@("@thesamja")</a>.</p>
+
+}
+
+
+@code
+{
+    public bool IsLoading { get; set; }
+
+    private VaccinationResponse Data { get; set; }
+    private VaccinationInfo LatestData { get; set; }
+    private int? AvgDailyVaccsThisWeek { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        IsLoading = true;
+        Data = await _api.GetData();
+        LatestData = Data.Data.OrderByDescending(x => x.Date).FirstOrDefault();
+        AvgDailyVaccsThisWeek = CalculateAvgDailyVaccsThisWeek();
+        IsLoading = false;
+
+        await base.OnInitializedAsync();
+    }
+
+    private int? CalculateAvgDailyVaccsThisWeek()
+    {
+        var itemsForWeek = Data.Data.OrderByDescending(x => x.Date).Take(7);
+
+        var avgForWeek = itemsForWeek.Average(x => x.TotalNew);
+
+        return (int?)avgForWeek.Value;
+    }
+
+    private DateTime CalculateFinishedDay(int dailyRate)
+    {
+        var totalEligable = 52000000; // todo: check figure
+
+        var totalVaccinesNeeded = totalEligable * 2;
+        var vaccinesStillTodo = totalVaccinesNeeded - LatestData.Total;
+
+        var daysNeeded = vaccinesStillTodo / dailyRate;
+
+        var finishDate = DateTime.Today.AddDays(daysNeeded.Value);
+
+        return finishDate;
+    }
+}

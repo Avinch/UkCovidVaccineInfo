@@ -1,0 +1,18 @@
+﻿@using Humanizer
+<h3>
+    @if (Value is DateTime time)
+    {
+        @time.Humanize();
+    }
+    else if (Value is int number)
+    {
+        @number.ToString("N0");
+    }
+    else
+    {
+        @Value.ToString()
+    }
+</h3>
+@code {
+    [Parameter] public object Value { get; set; }
+}
